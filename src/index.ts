@@ -13,14 +13,28 @@ const fetchByteArray = async (url: string): Promise<Uint8Array> => {
 export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
   const wasmModule = await initializeWasm();
 
+  console.log('wasmModule', wasmModule);
+
+  function refreshHEAPViews() {
+    console.log('Refreshing');
+    console.log('wasmModule.HEAPU8.buffer.byteLength', wasmModule.HEAPU8.buffer.byteLength);
+    console.log('wasmModule.memory.buffer.byteLength', wasmModule.wasmMemory.buffer.byteLength);
+    if (wasmModule.HEAPU8.buffer.byteLength !== wasmModule.wasmMemory.buffer.byteLength) {
+      console.log('Buffers are not equal');
+      wasmModule.HEAPU8 = new Uint8Array(wasmModule.wasmMemory.buffer);
+      console.log('HEAPU8 view is refreshed.');
+    }
+  }
+
   const extractData = async (data: Uint8Array): Promise<FilesData> => {
     /**Since WebAssembly, memory is accessed using pointers
       and the first parameter of extract_archive method from unpack.c, which is Uint8Array of file data, should be a pointer
       so we have to allocate memory for file data
     **/
     const inputPtr = wasmModule._malloc(data.length);
+    refreshHEAPViews();
     wasmModule.HEAPU8.set(data, inputPtr);
-
+    console.log('wasmModule',wasmModule);
     // fileCountPtr is the pointer to 4 bytes of memory in WebAssembly's heap that holds fileCount value from the ExtractedArchive structure in unpack.c.
     const fileCountPtr = wasmModule._malloc(4);
 

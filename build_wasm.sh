@@ -84,9 +84,10 @@ emcc unpack.c -o $WASM_LIB/unpack.js \
     $CPPFLAGS $LDFLAGS \
     ${PREFIX}/lib/libarchive.a \
     ${PREFIX}/lib/libz.a ${PREFIX}/lib/libbz2.a ${PREFIX}/lib/libzstd.a ${PREFIX}/lib/libiconv.a\
-    -s MODULARIZE=1 -s WASM=1 -O3 -s ALLOW_MEMORY_GROWTH=1 \
+    -s MODULARIZE=1 -s WASM=1 -O3 -s ALLOW_MEMORY_GROWTH=1 -fsanitize=address \
+    -s INITIAL_MEMORY=128MB \
     -s ENVIRONMENT=web \
-    -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "getValue", "UTF8ToString"]' \
+    -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "getValue", "UTF8ToString","wasmMemory"]' \
     -s EXPORTED_FUNCTIONS="['_extract_archive', '_malloc', '_free']"
 
 echo "Build completed successfully!"

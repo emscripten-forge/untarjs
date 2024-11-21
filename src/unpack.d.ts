@@ -1,4 +1,5 @@
 export interface IWasmModule {
+  wasmMemory: any;
   UTF8ToString(filenamePtr: number): string;
   HEAPU8: Uint8Array;
   _malloc(size: number): number;
