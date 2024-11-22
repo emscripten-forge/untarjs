@@ -67,8 +67,6 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* 
 
         if (!files[files_count].data) {
             free(files[files_count].filename);
-            free(files[files_count].data);
-            free(files);
             archive_read_free(archive);
             result->status = 0;
             snprintf(result->error_message, sizeof(result->error_message), "Memory allocation error for file data.");
@@ -113,6 +111,5 @@ void free_extracted_archive(ExtractedArchive* archive) {
     }
 
     free(archive->files);
-    free(archive->error_message);
     free(archive);
 }
