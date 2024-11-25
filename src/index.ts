@@ -66,6 +66,7 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
     */
     const statusPtr = wasmModule.getValue(resultPtr + 8, 'i32');
     const errorMessagePtr = wasmModule.getValue(resultPtr + 12, 'i32');
+    console.log('statusPtr', statusPtr);
     if (statusPtr !== 1) {
       if (errorMessagePtr !== 0) {
         const errorMessage = wasmModule.UTF8ToString(errorMessagePtr);
