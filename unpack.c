@@ -80,12 +80,10 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* 
         while (bytesRead < entrySize) {
             ssize_t ret = archive_read_data(archive, files[files_count].data + bytesRead, entrySize - bytesRead);
             if (ret < 0) {
-                for (size_t i = 0; i < files_count; i++) {
+                for (size_t i = 0; i <= files_count; i++) {
                     free(files[i].filename);
                     free(files[i].data);
                 }
-                if (files[files_count].filename) free(files[files_count].filename); 
-                if (files[files_count].data) free(files[files_count].data);
                 free(files);
                 result->status = 0;
                 snprintf(result->error_message, sizeof(result->error_message),  "%s", archive_error_string(archive));
