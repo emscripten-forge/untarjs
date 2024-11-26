@@ -13,33 +13,18 @@ const fetchByteArray = async (url: string): Promise<Uint8Array> => {
 export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
   const wasmModule = await initializeWasm();
 
-  function refreshHEAPViews() {
-    console.log('Refreshing');
-    console.log('wasmModule.HEAPU8.buffer.byteLength', wasmModule.HEAPU8.buffer.byteLength);
-    console.log('wasmModule.memory.buffer.byteLength', wasmModule.wasmMemory.buffer.byteLength);
-    if (wasmModule.HEAPU8.buffer.byteLength !== wasmModule.wasmMemory.buffer.byteLength) {
-      console.log('Buffers are not equal');
-      wasmModule.HEAPU8 = new Uint8Array(wasmModule.wasmMemory.buffer);
-      console.log('HEAPU8 view is refreshed.');
-    }
-  }
-
-  const extractData = async (data: Uint8Array): Promise<FilesData> => {
+  const extractData = (data: Uint8Array): FilesData => {
     /**Since WebAssembly, memory is accessed using pointers
       and the first parameter of extract_archive method from unpack.c, which is Uint8Array of file data, should be a pointer
       so we have to allocate memory for file data
     **/
-      if (data.buffer.byteLength === 0) {
-        throw new Error("ArrayBuffer is detached or empty.");
-    }
-    const inputPtr = wasmModule._malloc(data.length);
-    refreshHEAPViews();
+    let inputPtr: number | null = wasmModule._malloc(data.length);
     wasmModule.HEAPU8.set(data, inputPtr);
-    console.log('wasmModule',wasmModule);
-    // fileCountPtr is the pointer to 4 bytes of memory in WebAssembly's heap that holds fileCount value from the ExtractedArchive structure in unpack.c.
-    const fileCountPtr = wasmModule._malloc(4);
 
-    const resultPtr = wasmModule._extract_archive(
+    // fileCountPtr is the pointer to 4 bytes of memory in WebAssembly's heap that holds fileCount value from the ExtractedArchive structure in unpack.c.
+    let fileCountPtr: number | null = wasmModule._malloc(4);
+
+    let resultPtr: number | null = wasmModule._extract_archive(
       inputPtr,
       data.length,
       fileCountPtr
@@ -64,18 +49,22 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
       and in order to get pointer of statusPtr we need to calculate it as: 0(offset of file pointer) + 4 (offset of fileCount) + 4 (offset for status)
       'status' field and pointer of `error_message` are 32-bit signed integer
     */
-    const statusPtr = wasmModule.getValue(resultPtr + 8, 'i32');
-    const errorMessagePtr = wasmModule.getValue(resultPtr + 12, 'i32');
-    console.log('statusPtr', statusPtr);
+    let statusPtr: number | null = wasmModule.getValue(resultPtr + 8, 'i32');
+    let errorMessagePtr: number | null = wasmModule.getValue(
+      resultPtr + 12,
+      'i32'
+    );
     if (statusPtr !== 1) {
-      if (errorMessagePtr !== 0) {
-        const errorMessage = wasmModule.UTF8ToString(errorMessagePtr);
-        console.error('Extraction failed:', errorMessage);
-      } else {
-        console.error('Extraction failed with unknown error.');
-      }
+      const errorMessage = wasmModule.UTF8ToString(errorMessagePtr);
+      console.error(
+        'Extraction failed with status:',
+        statusPtr,
+        'Error:',
+        errorMessage
+      );
       wasmModule._free(inputPtr);
       wasmModule._free(fileCountPtr);
+      wasmModule._free(errorMessagePtr);
       wasmModule._free_extracted_archive(resultPtr);
       return {};
     }
@@ -107,7 +96,6 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
       const filenamePtr = wasmModule.getValue(fileDataPtr, 'i32');
       const dataSize = wasmModule.getValue(fileDataPtr + 8, 'i32');
       const dataPtr = wasmModule.getValue(fileDataPtr + 4, 'i32');
-      if (dataPtr && dataSize > 0) {
       const filename = wasmModule.UTF8ToString(filenamePtr);
       const fileData = new Uint8Array(
         wasmModule.HEAPU8.buffer,
@@ -115,26 +103,31 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
         dataSize
       );
 
-      files[filename] = fileData;
-    }
-    }
+      const fileDataCopy = new Uint8Array(Array.from(fileData));
 
+      files[filename] = fileDataCopy;
+    }
+    let newFiles = { ...files };
     wasmModule._free(inputPtr);
     wasmModule._free(fileCountPtr);
+    wasmModule._free(errorMessagePtr);
     wasmModule._free_extracted_archive(resultPtr);
+    inputPtr = null;
+    fileCountPtr = null;
+    resultPtr = null;
+    errorMessagePtr = null;
 
-    return files;
+    return newFiles;
   };
 
   const extract = async (url: string): Promise<FilesData> => {
     const data = await fetchByteArray(url);
-    return await extractData(data);
-  }
+    return extractData(data);
+  };
 
   return {
     extract,
-    extractData,
-    wasmModule
+    extractData
   };
 };
 

@@ -1,6 +1,6 @@
 export interface IWasmModule {
   wasmMemory: any;
-  private _free_extracted_archive(resultPtr: number): void;
+  _free_extracted_archive(resultPtr: number): void;
   UTF8ToString(filenamePtr: number): string;
   HEAPU8: Uint8Array;
   _malloc(size: number): number;
