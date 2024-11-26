@@ -123,7 +123,7 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
   const extract = async (url: string): Promise<FilesData> => {
     const data = await fetchByteArray(url);
     return extractData(data);
-  };
+  }
 
   return {
     extract,

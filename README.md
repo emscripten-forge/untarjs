@@ -7,11 +7,12 @@ Fetching and unpacking archives. This package uses compiled `libarchive` into wa
 ## Using
 
 This package has 2 methods:
-- extract(url) - downloads an archive throught the url and returns extracted data int the array of objects where each of them has next structure:
+- extract(url) - downloads an archive through the url and returns extracted data as an object representing the file structure:
 ```
 {
-      "data":  new Uint8Array([5, 6, 7, 8]),
-      "filename": "info/paths.json"
+    "file1": Uint8Array
+    "info/paths.json":  Uint8Array,
+    ...
 }
 ```
 - exctractData(data) - accepts Uint8Array archive data and returns exracted data in the same format which `extract` method does.
