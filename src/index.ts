@@ -13,7 +13,10 @@ const fetchByteArray = async (url: string): Promise<Uint8Array> => {
 export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
   const wasmModule = await initializeWasm();
 
-  const extractData = async (data: Uint8Array, decompressOnly: boolean = false): Promise<FilesData> => {
+  const extractData = async (
+    data: Uint8Array,
+    decompressOnly: boolean = false
+  ): Promise<FilesData> => {
     /**Since WebAssembly, memory is accessed using pointers
       and the first parameter of extract_archive method from unpack.c, which is Uint8Array of file data, should be a pointer
       so we have to allocate memory for file data
@@ -71,7 +74,6 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
     }
     const filesPtr = wasmModule.getValue(resultPtr, 'i32');
     const fileCount = wasmModule.getValue(resultPtr + 4, 'i32');
-    
 
     /**
      * FilesPtr is a pointer that refers to an instance of the FileData in unpack.c
@@ -91,7 +93,7 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
       where `12` is the size of each FileData structure in memory in bytes: 4 + 4 + 4
     */
 
-    for (let i = 0; i <fileCount; i++) {
+    for (let i = 0; i < fileCount; i++) {
       const fileDataPtr = filesPtr + i * 12;
       const filenamePtr = wasmModule.getValue(fileDataPtr, 'i32');
       const dataSize = wasmModule.getValue(fileDataPtr + 8, 'i32');
@@ -102,11 +104,11 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
         dataPtr,
         dataSize
       );
-      
+
       const fileDataCopy = fileData.slice(0);
       files[filename] = fileDataCopy;
     }
-  
+
     wasmModule._free(inputPtr);
     wasmModule._free(fileCountPtr);
     wasmModule._free_extracted_archive(resultPtr);
@@ -114,27 +116,26 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
     fileCountPtr = null;
     resultPtr = null;
     errorMessagePtr = null;
-  
+
     return files;
-  
   };
 
   const extract = async (url: string): Promise<FilesData> => {
     let isArchive: boolean = checkIsArchive(url);
     const data = await fetchByteArray(url);
     return extractData(data, !isArchive);
-  }
+  };
 
-  const checkIsArchive = (url: string): boolean=>{
+  const checkIsArchive = (url: string): boolean => {
     let isArchive: boolean = false;
-    let archiveExtArr = ['.conda','tar.bz2', 'tar.gz'];
-    archiveExtArr.forEach((type)=>{
+    let archiveExtArr = ['.conda', 'tar.bz2', 'tar.gz'];
+    archiveExtArr.forEach(type => {
       if (url.toLowerCase().endsWith(type)) {
         isArchive = true;
       }
     });
     return isArchive;
-  }
+  };
 
   return {
     extract,
