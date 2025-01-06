@@ -9,7 +9,7 @@ export interface IWasmModule {
     inputPtr: number,
     inputSize: number,
     fileCountPtr: number,
-    decompressedOnly: boolean
+    decompressionOnly: boolean
   ): number;
   getValue(ptr: number, type: string): number;
 }

@@ -21,7 +21,7 @@ typedef struct {
 
 
 EMSCRIPTEN_KEEPALIVE
-ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* fileCount, bool decompressOnly ) {
+ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* fileCount, bool decompressionOnly ) {
     struct archive* archive;
     struct archive_entry* entry;
     FileData* files = NULL;
@@ -40,7 +40,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* 
     archive = archive_read_new();
     archive_read_support_filter_all(archive);
     archive_read_support_format_all(archive);
-    if (decompressOnly) {
+    if (decompressionOnly) {
         archive_read_support_format_raw(archive);
     }
 
@@ -52,8 +52,8 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* 
     }
 
     while (archive_read_next_header(archive, &entry) == ARCHIVE_OK) {
-        const char* filename =  decompressOnly ? "decompression.json": archive_entry_pathname(entry);
-        size_t entrySize = decompressOnly ? inputSize: archive_entry_size(entry);
+        const char* filename =  decompressionOnly ? "decompression.json": archive_entry_pathname(entry);
+        size_t entrySize = decompressionOnly ? inputSize: archive_entry_size(entry);
         files= realloc(files, sizeof(FileData) * (files_count + 1));
         if (!files) {
             archive_read_free(archive);

@@ -15,7 +15,7 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
 
   const extractData = async (
     data: Uint8Array,
-    decompressOnly: boolean = false
+    decompressionOnly: boolean = false
   ): Promise<FilesData> => {
     /**Since WebAssembly, memory is accessed using pointers
       and the first parameter of extract_archive method from unpack.c, which is Uint8Array of file data, should be a pointer
@@ -31,7 +31,7 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
       inputPtr,
       data.length,
       fileCountPtr,
-      decompressOnly
+      decompressionOnly
     );
     const files: FilesData = {};
     /**
