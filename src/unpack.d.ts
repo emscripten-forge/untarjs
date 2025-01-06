@@ -1,4 +1,5 @@
 export interface IWasmModule {
+  private _extract_data(inputPtr: number, length: number, fileCountPtr: number, decompressedOnly: boolean): number;
   wasmMemory: any;
   _free_extracted_archive(resultPtr: number): void;
   UTF8ToString(filenamePtr: number): string;

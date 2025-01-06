@@ -24,12 +24,13 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
     // fileCountPtr is the pointer to 4 bytes of memory in WebAssembly's heap that holds fileCount value from the ExtractedArchive structure in unpack.c.
     let fileCountPtr: number | null = wasmModule._malloc(4);
 
-    let resultPtr: number | null = wasmModule._extract_archive(
+    let resultPtr: number | null = wasmModule._extract_data(
       inputPtr,
       data.length,
-      fileCountPtr
+      fileCountPtr,
+      true
     );
-
+    const files: FilesData = {};
     /**
      * Since extract_archive returns a pointer that refers to an instance of the ExtractedArchive in unpack.c
         typedef struct {
@@ -71,7 +72,8 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
     const filesPtr = wasmModule.getValue(resultPtr, 'i32');
     const fileCount = wasmModule.getValue(resultPtr + 4, 'i32');
 
-    const files: FilesData = {};
+    console.log('fileCount',fileCount);
+    
 
     /**
      * FilesPtr is a pointer that refers to an instance of the FileData in unpack.c
@@ -91,12 +93,14 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
       where `12` is the size of each FileData structure in memory in bytes: 4 + 4 + 4
     */
 
-    for (let i = 0; i < fileCount; i++) {
+    for (let i = 0; i <fileCount; i++) {
       const fileDataPtr = filesPtr + i * 12;
       const filenamePtr = wasmModule.getValue(fileDataPtr, 'i32');
       const dataSize = wasmModule.getValue(fileDataPtr + 8, 'i32');
+      console.log('dataSize', dataSize);
       const dataPtr = wasmModule.getValue(fileDataPtr + 4, 'i32');
       const filename = wasmModule.UTF8ToString(filenamePtr);
+      console.log('filename', filename);
       const fileData = new Uint8Array(
         wasmModule.HEAPU8.buffer,
         dataPtr,
@@ -115,11 +119,15 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
     fileCountPtr = null;
     resultPtr = null;
     errorMessagePtr = null;
+  
     return files;
+  
   };
 
   const extract = async (url: string): Promise<FilesData> => {
+    console.log('url', url);
     const data = await fetchByteArray(url);
+    console.log('data', data);
     return extractData(data);
   }
 
