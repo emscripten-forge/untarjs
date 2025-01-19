@@ -8,7 +8,6 @@ export interface IWasmModule {
   _extract_archive(
     inputPtr: number,
     inputSize: number,
-    fileCountPtr: number,
     decompressionOnly: boolean
   ): number;
   getValue(ptr: number, type: string): number;

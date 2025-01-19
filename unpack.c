@@ -21,9 +21,10 @@ typedef struct {
 
 
 EMSCRIPTEN_KEEPALIVE
-ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* fileCount, bool decompressionOnly ) {
+ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, bool decompressionOnly ) {
     struct archive* archive;
     struct archive_entry* entry;
+    size_t files_struct_length = 100;
     FileData* files = NULL;
     size_t files_count = 0;
 
@@ -50,16 +51,23 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* 
         archive_read_free(archive);
         return result;
     }
+    files = malloc(sizeof(FileData) * files_struct_length);
 
     while (archive_read_next_header(archive, &entry) == ARCHIVE_OK) {
         const char* filename =  decompressionOnly ? "decompression.json": archive_entry_pathname(entry);
         size_t entrySize = decompressionOnly ? inputSize: archive_entry_size(entry);
-        files= realloc(files, sizeof(FileData) * (files_count + 1));
-        if (!files) {
-            archive_read_free(archive);
-            result->status = 0;
-            snprintf(result->error_message, sizeof(result->error_message), "Memory allocation error for file data.");
-            return result;
+        if (files_count + 1 > files_struct_length) {
+            files_struct_length *= 2; // double the length
+            FileData* oldfiles = files;
+            files= realloc(files, sizeof(FileData) * files_struct_length);
+            if (!files) {
+                archive_read_free(archive);
+                result->status = 0;
+                result->fileCount = files_count;
+                result->files = oldfiles; // otherwise memory is lost, alternatively also everything can be freed.
+                snprintf(result->error_message, sizeof(result->error_message), "Memory allocation error for file data.");
+                return result;
+            }     
         }
         files[files_count].filename = strdup(filename);
         files[files_count].data = malloc(entrySize);
@@ -67,9 +75,12 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* 
 
         if (!files[files_count].data) {
             free(files[files_count].filename);
+            files[files_count].filename = NULL; 
             archive_read_free(archive);
             result->status = 0;
-            snprintf(result->error_message, sizeof(result->error_message), "Memory allocation error for file data.");
+            result->fileCount = files_count;
+            result->files = files; // otherwise memory is lost, alternatively also everything can be freed.
+            snprintf(result->error_message, sizeof(result->error_message), "Memory allocation error for file contents.");
             return result;
         }
 
@@ -82,6 +93,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, size_t* 
                     free(files[i].data);
                 }
                 free(files);
+                result->files = NULL;
                 result->status = 0;
                 snprintf(result->error_message, sizeof(result->error_message), "%s", archive_error_string(archive));
                 archive_read_free(archive);

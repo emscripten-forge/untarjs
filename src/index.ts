@@ -24,13 +24,10 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
     let inputPtr: number | null = wasmModule._malloc(data.length);
     wasmModule.HEAPU8.set(data, inputPtr);
 
-    // fileCountPtr is the pointer to 4 bytes of memory in WebAssembly's heap that holds fileCount value from the ExtractedArchive structure in unpack.c.
-    let fileCountPtr: number | null = wasmModule._malloc(4);
 
     let resultPtr: number | null = wasmModule._extract_archive(
       inputPtr,
       data.length,
-      fileCountPtr,
       decompressionOnly
     );
     const files: FilesData = {};
@@ -64,10 +61,8 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
         errorMessage
       );
       wasmModule._free(inputPtr);
-      wasmModule._free(fileCountPtr);
       wasmModule._free_extracted_archive(resultPtr);
       inputPtr = null;
-      fileCountPtr = null;
       resultPtr = null;
       errorMessagePtr = null;
       throw new Error(errorMessage);
@@ -110,10 +105,8 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
     }
 
     wasmModule._free(inputPtr);
-    wasmModule._free(fileCountPtr);
     wasmModule._free_extracted_archive(resultPtr);
     inputPtr = null;
-    fileCountPtr = null;
     resultPtr = null;
     errorMessagePtr = null;
 
