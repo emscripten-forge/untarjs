@@ -40,9 +40,10 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, bool dec
 
     archive = archive_read_new();
     archive_read_support_filter_all(archive);
-    archive_read_support_format_all(archive);
     if (decompressionOnly) {
         archive_read_support_format_raw(archive);
+    } else {
+        archive_read_support_format_all(archive);
     }
 
     if (archive_read_open_memory(archive, inputData, inputSize) != ARCHIVE_OK) {
@@ -55,7 +56,8 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, bool dec
 
     while (archive_read_next_header(archive, &entry) == ARCHIVE_OK) {
         const char* filename =  decompressionOnly ? "decompression.json": archive_entry_pathname(entry);
-        size_t entrySize = decompressionOnly ? inputSize: archive_entry_size(entry);
+       
+        size_t entrySize = decompressionOnly ? inputSize*3: archive_entry_size(entry);
         if (files_count + 1 > files_struct_length) {
             files_struct_length *= 2; // double the length
             FileData* oldfiles = files;
@@ -104,6 +106,79 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize, bool dec
         files_count++;
     }
 
+    archive_read_free(archive);
+    result->files = files;
+    result->fileCount = files_count;
+    result->status = 1;
+    return result;
+}
+
+ExtractedArchive* decompress(uint8_t* inputData, size_t inputSize ) {
+    struct archive* archive;
+    struct archive_entry* entry;
+    size_t files_struct_length = 100;
+    FileData* files = NULL;
+    size_t files_count = 0;
+
+    int r;
+    ssize_t size;
+    const size_t buffsize = 16384;
+    char buff[buffsize];
+
+    ExtractedArchive* result = (ExtractedArchive*)malloc(sizeof(ExtractedArchive));
+    if (!result) {
+        return NULL;
+    }
+
+    result->files = NULL;
+    result->fileCount = 0;
+    result->status = 1;
+    result->error_message[0] = '\0';
+
+    archive = archive_read_new();
+    archive_read_support_filter_all(archive);
+    archive_read_support_format_raw(archive);
+
+    if (archive_read_open_memory(archive, inputData, inputSize) != ARCHIVE_OK) {
+        result->status = 0;
+        snprintf(result->error_message, sizeof(result->error_message), "%s", archive_error_string(archive));
+        archive_read_free(archive);
+        return result;
+    }
+    r = archive_read_next_header(archive, &entry);
+    if (r != ARCHIVE_OK) {
+        result->status = 0;
+        snprintf(result->error_message, sizeof(result->error_message), "%s", archive_error_string(archive));
+        archive_read_free(archive);
+        return result;
+    }
+
+    const char* filename =  "decompression";
+    files[files_count].filename = strdup(filename);
+    files[files_count].data = malloc(inputSize*3);
+    files[files_count].data_size = inputSize*3;
+
+    
+    for (;;) {
+        ssize_t ret = archive_read_data(archive, files[files_count].data, files[files_count].data_size);
+        if (ret < 0) {
+            for (size_t i = 0; i <= files_count; i++) {
+                free(files[i].filename);
+                    free(files[i].data);
+                }
+                free(files);
+                result->files = NULL;
+                result->status = 0;
+                snprintf(result->error_message, sizeof(result->error_message), "%s", archive_error_string(archive));
+                archive_read_free(archive);
+                return result;
+            }
+
+            if (ret == 0) {
+                break;
+            }
+    }
+     
     archive_read_free(archive);
     result->files = files;
     result->fileCount = files_count;
