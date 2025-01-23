@@ -18,21 +18,21 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
     decompressionOnly: boolean = false
   ): Promise<FilesData> => {
     /**Since WebAssembly, memory is accessed using pointers
-      and the first parameter of extract_archive method from unpack.c, which is Uint8Array of file data, should be a pointer
+      and the first parameter of extract method from unpack.c, which is Uint8Array of file data, should be a pointer
       so we have to allocate memory for file data
     **/
     let inputPtr: number | null = wasmModule._malloc(data.length);
     wasmModule.HEAPU8.set(data, inputPtr);
 
 
-    let resultPtr: number | null = wasmModule._extract_archive(
+    let resultPtr: number | null = wasmModule._extract(
       inputPtr,
       data.length,
       decompressionOnly
     );
     const files: FilesData = {};
     /**
-     * Since extract_archive returns a pointer that refers to an instance of the ExtractedArchive in unpack.c
+     * Since extract returns a pointer that refers to an instance of the ExtractedArchive in unpack.c
         typedef struct {
           FileData* files;
           size_t fileCount;
@@ -99,7 +99,6 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
         dataPtr,
         dataSize
       );
-
       const fileDataCopy = fileData.slice(0);
       files[filename] = fileDataCopy;
     }
@@ -121,7 +120,7 @@ export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
 
   const checkIsArchive = (url: string): boolean => {
     let isArchive: boolean = false;
-    let archiveExtArr = ['.conda', 'tar.bz2', 'tar.gz'];
+    let archiveExtArr = ['.conda', 'tar.bz2', 'tar.gz', '.zip'];
     archiveExtArr.forEach(type => {
       if (url.toLowerCase().endsWith(type)) {
         isArchive = true;
