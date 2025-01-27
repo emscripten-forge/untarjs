@@ -5,6 +5,7 @@ npm-debug.log
 # Build output directories
 lib/
 libs/
+tsconfig.tsbuildinfo
 
 # The wasm-unpack-env environment
 wasm-unpack-env/

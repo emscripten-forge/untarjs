@@ -62,7 +62,7 @@ if true; then
             --yes \
             zlib bzip2 zstd libiconv libarchive "emscripten-abi=3.1.45"
 fi
-   
+
 export PREFIX=$PREFIX_DIR
 export CPPFLAGS="-I$PREFIX/include"
 export LDFLAGS="-L$PREFIX/lib"
@@ -84,7 +84,7 @@ emcc unpack.c -o $WASM_LIB/unpack.js \
     $CPPFLAGS $LDFLAGS \
     ${PREFIX}/lib/libarchive.a \
     ${PREFIX}/lib/libz.a ${PREFIX}/lib/libbz2.a ${PREFIX}/lib/libzstd.a ${PREFIX}/lib/libiconv.a\
-    -s MODULARIZE=1 -s WASM=1 -O3 -s ALLOW_MEMORY_GROWTH=1 -fsanitize=address \
+    -s MODULARIZE=1 -s WASM=1 -O3 -s ALLOW_MEMORY_GROWTH=1 \
     -s INITIAL_MEMORY=128MB \
     -s ENVIRONMENT=web \
     -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "getValue", "UTF8ToString", "wasmMemory"]' \
