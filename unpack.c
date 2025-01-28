@@ -137,10 +137,16 @@ char* write_to_temp_file(uint8_t* data, size_t size) {
         free(temp_file_name);
         return NULL;
     }
+    if (fclose(temp_file) != 0) {
+        perror("Failed to close temporary file");
+        unlink(temp_file_name);
+        free(temp_file_name);
+        return NULL;
+    }
 
-    fclose(temp_file);
     return temp_file_name;
 }
+
 
 EMSCRIPTEN_KEEPALIVE
 ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
@@ -152,13 +158,14 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
     char buff[buffsize];
     size_t total_size = 0; 
     const char *error_message;
+    size_t files_struct_length = 1;
 
-    FileData* files = malloc(sizeof(FileData) * (files_count + 1));
-
+    FileData* files = malloc(sizeof(FileData) * files_struct_length);
     if (!files) {
         printf("Failed to allocate memory for files array\n");
         return NULL;
     }
+    
     
     ExtractedArchive* result = (ExtractedArchive*)malloc(sizeof(ExtractedArchive));
     if (!result) {
@@ -177,19 +184,29 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
         error_message = "Failed to create temporary file";
         return error_handler(result, error_message, archive);
     }
-
     archive = archive_read_new();
     archive_read_support_filter_all(archive);
     archive_read_support_format_raw(archive);
 
-    if (archive_read_open_filename(archive, temp_file_name, inputSize) != ARCHIVE_OK) {
+    if (archive_read_open_filename(archive, temp_file_name, 1024 * 1024) != ARCHIVE_OK) {
         unlink(temp_file_name);
         free(temp_file_name);
         free(files);
         return error_handler(result, archive_error_string(archive), archive);
     }
-
     while (archive_read_next_header(archive, &entry) == ARCHIVE_OK) {
+
+        if (files_count == files_struct_length) {
+            files_struct_length *= 2;
+            FileData* temp = realloc(files, sizeof(FileData) * files_struct_length);
+            if (!temp) {
+                free(files);
+                error_message = "Failed to reallocate memory for files";
+                return error_handler(result, error_message, archive);
+            }
+            files = temp;
+        }
+
         const char* filename = archive_entry_pathname(entry);
         if (!filename) filename = "decompression";
 
