@@ -261,6 +261,7 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
         while (1) {
             iteration++;
             ret = archive_read_data(archive, buff, buffsize);
+            printf("ret %zd\n", ret);
             if (ret < 0) {
                 for (size_t i = 0; i <= files_count; i++) {
                     free(files[i].filename);
@@ -315,7 +316,6 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
         files[files_count].data_size = total_size;
         files_count++;
     }
-    printf("Test: %zd\n", test);
     printf("Iteration %zd\n", iteration);
     archive_read_free(archive);
     unlink(temp_file_name);
