@@ -120,7 +120,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
 }
 
 char* write_to_temp_file(uint8_t* data, size_t size) {
-    char* temp_file_name = strdup("/tmp/dddhecompressionXXXXXX");
+    char* temp_file_name = strdup("/tmp/decompressionXXXXXX");
     int fd = mkstemp(temp_file_name);
     if (fd == -1) {
         perror("Failed to create temporary file for decompression file");
