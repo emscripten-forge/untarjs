@@ -5,7 +5,6 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include <emscripten.h>
-#include <sys/time.h>
 
 typedef struct {
     char* filename;
@@ -19,12 +18,6 @@ typedef struct {
     int status;
     char error_message[256];
 } ExtractedArchive;
-
-double get_time() {
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return (tv.tv_sec) + tv.tv_usec / 1000000.0;
-}
 
 ExtractedArchive* error_handler(ExtractedArchive* result, const char *error_message, struct archive* archive) {
 
@@ -41,7 +34,7 @@ ExtractedArchive* error_handler(ExtractedArchive* result, const char *error_mess
 }
 
 EMSCRIPTEN_KEEPALIVE
-ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
+ExtractedArchive* extract_archive(uint8_t* input_data, size_t input_size ) {
     struct archive* archive;
     struct archive_entry* entry;
     size_t files_struct_length = 100;
@@ -63,7 +56,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
     archive_read_support_filter_all(archive);
     archive_read_support_format_all(archive);
 
-    if (archive_read_open_memory(archive, inputData, inputSize) != ARCHIVE_OK) {
+    if (archive_read_open_memory(archive, input_data, input_size) != ARCHIVE_OK) {
         return error_handler(result,archive_error_string(archive), archive); 
     }
     files = malloc(sizeof(FileData) * files_struct_length);
@@ -154,20 +147,16 @@ char* write_to_temp_file(uint8_t* data, size_t size) {
     return temp_file_name;
 }
 
-
 EMSCRIPTEN_KEEPALIVE
-EMSCRIPTEN_KEEPALIVE
-ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
+ExtractedArchive* decompression(uint8_t* input_data, size_t input_size) {
     struct archive* archive;
     struct archive_entry* entry;
     size_t files_count = 0;
-    double start_time, end_time;
-
     size_t total_size = 0;
     const char *error_message;
     size_t files_struct_length = 1;
     size_t compression_ratio = 10;
-    size_t estimated_decompressed_size = inputSize * compression_ratio;
+    size_t estimated_decompressed_size = input_size * compression_ratio;
     const size_t buffsize = estimated_decompressed_size;
     char* buff = (char*)malloc(buffsize);
 
@@ -175,9 +164,6 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
         printf("Failed to allocate memory for decompression buffer\n");
         return NULL;
     }
-
-    printf("inputSize %zd\n", inputSize);
-    printf("estimated_decompressed_size %zd\n", estimated_decompressed_size);
 
     FileData* files = malloc(sizeof(FileData) * files_struct_length);
     if (!files) {
@@ -198,7 +184,7 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
     result->status = 1;
     result->error_message[0] = '\0';
 
-    char* temp_file_name = write_to_temp_file(inputData, inputSize);
+    char* temp_file_name = write_to_temp_file(input_data, input_size);
     if (!temp_file_name) {
         free(files);
         free(buff);
@@ -218,7 +204,6 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
         return error_handler(result, archive_error_string(archive), archive);
     }
   
-    ssize_t iteration = 0;
     while (archive_read_next_header(archive, &entry) == ARCHIVE_OK) {
         if (files_count + 1 > files_struct_length) {
             files_struct_length *= 2; // double the length
@@ -228,7 +213,7 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
                 unlink(temp_file_name);
                 free(temp_file_name);
                 result->fileCount = files_count;
-                result->files = oldfiles; // otherwise memory is lost, alternatively also everything can be freed.
+                result->files = oldfiles;
                 error_message = "Memory allocation error for file data.";
                 return error_handler(result, error_message, archive);
             }     
@@ -247,7 +232,7 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
             free(buff);
             files[files_count].filename = NULL;
             result->fileCount = files_count;
-            result->files = files; // otherwise memory is lost, alternatively also everything can be freed.
+            result->files = files;
 
             error_message = "Memory allocation error for file contents.";
             return error_handler(result, error_message, archive);
@@ -257,11 +242,9 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
         ssize_t ret;
         total_size = 0; 
 
-        start_time = get_time();
         while (1) {
-            iteration++;
             ret = archive_read_data(archive, buff, buffsize);
-            printf("ret %zd\n", ret);
+
             if (ret < 0) {
                 for (size_t i = 0; i <= files_count; i++) {
                     free(files[i].filename);
@@ -278,11 +261,9 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
             if (ret == 0) {
                 break;
             }
+
             size_t sum = total_size + ret;
-            printf("sum %zd\n", sum);
-         
-            if (total_size + ret > estimated_decompressed_size) {
-        
+            if (sum > estimated_decompressed_size) {
                 size_t new_size = estimated_decompressed_size * 1.5; 
                 void* new_data = realloc(files[files_count].data, new_size);//?
                 if (!new_data) {
@@ -297,7 +278,6 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
                     free(buff);
                     unlink(temp_file_name);
                     free(temp_file_name);
-                   
                     error_message = "Memory allocation error";
                     result = error_handler(result, error_message, archive);
                     break;
@@ -305,23 +285,25 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
 
                 files[files_count].data = new_data;
                 estimated_decompressed_size = new_size;
+
+            } else if (sum>0 && sum < estimated_decompressed_size) {
+                  memcpy(files[files_count].data + total_size, buff, ret);
+                  total_size += ret;
+                  break;
             }
 
             memcpy(files[files_count].data + total_size, buff, ret);
             total_size += ret;
         }
-        end_time = get_time();
-        printf("Execution time: %f seconds\n", end_time - start_time);
+      
 
         files[files_count].data_size = total_size;
         files_count++;
+        free(buff);
     }
-    printf("Iteration %zd\n", iteration);
     archive_read_free(archive);
     unlink(temp_file_name);
     free(temp_file_name);
-    free(buff);
-
     result->files = files;
     result->fileCount = files_count;
     result->status = 1;
@@ -330,11 +312,11 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
 
  
 EMSCRIPTEN_KEEPALIVE
-ExtractedArchive* extract(uint8_t* inputData, size_t inputSize, bool decompressionOnly ) {
-    if (!decompressionOnly) {
-        return extract_archive(inputData, inputSize);
+ExtractedArchive* extract(uint8_t* input_data, size_t input_size, bool decompression_only ) {
+    if (!decompression_only) {
+        return extract_archive(input_data, input_size);
     } else {
-        return decompression(inputData, inputSize);
+        return decompression(input_data, input_size);
     }
 }
 
