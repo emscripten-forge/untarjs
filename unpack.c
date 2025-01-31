@@ -5,6 +5,7 @@
 #include <archive.h>
 #include <archive_entry.h>
 #include <emscripten.h>
+#include <sys/time.h>
 
 typedef struct {
     char* filename;
@@ -18,6 +19,13 @@ typedef struct {
     int status;
     char error_message[256];
 } ExtractedArchive;
+
+
+double get_time() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec) + tv.tv_usec / 1000000.0;
+}
 
 ExtractedArchive* error_handler(ExtractedArchive* result, const char *error_message, struct archive* archive) {
 
@@ -157,8 +165,14 @@ ExtractedArchive* decompression(uint8_t* input_data, size_t input_size) {
     size_t files_struct_length = 1;
     size_t compression_ratio = 10;
     size_t estimated_decompressed_size = input_size * compression_ratio;
-    const size_t buffsize = estimated_decompressed_size;
+
+    /* 64KB, archive_read_data can do realloc too during reading data,
+       so data chunks size should be defined carefully. There is memory leaks with 4MB data chunck size
+    */
+    const size_t buffsize = 65536;
     char* buff = (char*)malloc(buffsize);
+
+    double start_time, end_time;
 
     if (!buff) {
         printf("Failed to allocate memory for decompression buffer\n");
@@ -195,7 +209,11 @@ ExtractedArchive* decompression(uint8_t* input_data, size_t input_size) {
     archive = archive_read_new();
     archive_read_support_filter_all(archive);
     archive_read_support_format_raw(archive);
-   
+
+    /* Putting buffer size allows libarchive to read a file by data chunks.
+       This reduces memory leaks on libarchive side
+    */
+    
     if (archive_read_open_filename(archive, temp_file_name, buffsize) != ARCHIVE_OK) {
         unlink(temp_file_name);
         free(temp_file_name);
@@ -203,7 +221,7 @@ ExtractedArchive* decompression(uint8_t* input_data, size_t input_size) {
         free(buff);
         return error_handler(result, archive_error_string(archive), archive);
     }
-  
+    
     while (archive_read_next_header(archive, &entry) == ARCHIVE_OK) {
         if (files_count + 1 > files_struct_length) {
             files_struct_length *= 2; // double the length
@@ -286,16 +304,11 @@ ExtractedArchive* decompression(uint8_t* input_data, size_t input_size) {
                 files[files_count].data = new_data;
                 estimated_decompressed_size = new_size;
 
-            } else if (sum>0 && sum < estimated_decompressed_size) {
-                  memcpy(files[files_count].data + total_size, buff, ret);
-                  total_size += ret;
-                  break;
             }
 
             memcpy(files[files_count].data + total_size, buff, ret);
             total_size += ret;
         }
-      
 
         files[files_count].data_size = total_size;
         files_count++;
