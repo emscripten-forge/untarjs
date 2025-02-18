@@ -1,7 +1,7 @@
 import initializeWasm from './helper';
 import { FilesData, IUnpackJSAPI } from './types';
 
-const fetchByteArray = async (url: string): Promise<Uint8Array> => {
+export const fetchByteArray = async (url: string): Promise<Uint8Array> => {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
@@ -10,8 +10,8 @@ const fetchByteArray = async (url: string): Promise<Uint8Array> => {
   return new Uint8Array(arrayBuffer);
 };
 
-export const initUntarJS = async (): Promise<IUnpackJSAPI> => {
-  const wasmModule = await initializeWasm();
+export const initUntarJS = async (locateWasm?: (file: string) => string): Promise<IUnpackJSAPI> => {
+  const wasmModule = await initializeWasm(locateWasm);
 
   const extractData = async (
     data: Uint8Array,

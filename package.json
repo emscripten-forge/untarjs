@@ -5,10 +5,9 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
+    "build": "yarn run clean && tsc && yarn run build:wasm && copyfiles -u 1 \"src/**/*.d.ts\" lib",
     "build:wasm": "node build_wasm.js",
     "clean": "rimraf lib && rimraf tsconfig.tsbuildinfo",
-    "build": "yarn run clean && tsc && yarn run build:wasm",
-    "build:prod": "yarn run clean && tsc && yarn run build:wasm",
     "prettier": "prettier --list-different --write \"src/**/*.ts\"",
     "prettier:check": "prettier --check \"src/**/*.ts\"",
     "eslint": "eslint --ext .ts --fix .",
@@ -44,9 +43,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@types/copyfiles": "^2",
     "@types/node": "^22.8.1",
     "@typescript-eslint/eslint-plugin": "~6.13.2",
     "@typescript-eslint/parser": "~6.13.2",
+    "copyfiles": "^2.4.1",
     "eslint": "~8.55.0",
     "eslint-config-prettier": "~9.1.0",
     "eslint-plugin-prettier": "~5.0.1",

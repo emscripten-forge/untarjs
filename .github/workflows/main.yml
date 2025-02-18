@@ -44,7 +44,7 @@ jobs:
         run: |
           micromamba activate untarjs
 
-          yarn run build:prod
+          yarn run build
 
       - name: Run eslint
         run: |
