@@ -5,7 +5,7 @@ const initializeWasm = async (): Promise<IWasmModule> => {
   const wasmModule: IWasmModule = await unpack({
     locateFile(path: string) {
       if (path.endsWith('.wasm')) {
-        return unpackWasm;
+        return (new URL(unpackWasm, import.meta.url)).href;
       }
       return path;
     }
