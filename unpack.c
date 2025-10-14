@@ -41,6 +41,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
     FileData* files = NULL;
     size_t files_count = 0;
     const char *error_message;
+    bool hasSymLinks = false;
 
     ExtractedArchive* result = (ExtractedArchive*)malloc(sizeof(ExtractedArchive));
     if (!result) {
@@ -57,13 +58,20 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
     archive_read_support_format_all(archive);
 
     if (archive_read_open_memory(archive, inputData, inputSize) != ARCHIVE_OK) {
-        return error_handler(result,archive_error_string(archive), archive); 
+        return error_handler(result,archive_error_string(archive), archive);
     }
     files = malloc(sizeof(FileData) * files_struct_length);
 
     while (archive_read_next_header(archive, &entry) == ARCHIVE_OK) {
         const char* filename = archive_entry_pathname(entry);
         size_t entrySize = archive_entry_size(entry);
+
+        // Ignore symbolic links for now
+        if (archive_entry_filetype(entry) == AE_IFLNK) {
+            hasSymLinks = true;
+            continue;
+        }
+
         if (files_count + 1 > files_struct_length) {
             files_struct_length *= 2; // double the length
             FileData* oldfiles = files;
@@ -73,8 +81,9 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
                 result->files = oldfiles; // otherwise memory is lost, alternatively also everything can be freed.
                 error_message = "Memory allocation error for file data.";
                 return error_handler(result, error_message, archive);
-            }     
+            }
         }
+
         files[files_count].filename = strdup(filename);
         files[files_count].data = malloc(entrySize);
         files[files_count].data_size = entrySize;
@@ -103,6 +112,77 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
             bytesRead += ret;
         }
         files_count++;
+    }
+
+    // Resolve symlinks
+    if (hasSymLinks) {
+        // Rewind and reopen the archive to iterate over symlinks
+        archive_read_free(archive);
+        archive = archive_read_new();
+        archive_read_support_filter_all(archive);
+        archive_read_support_format_all(archive);
+
+        if (archive_read_open_memory(archive, inputData, inputSize) != ARCHIVE_OK) {
+            return error_handler(result, archive_error_string(archive), archive);
+        }
+
+        struct archive_entry *symlink_entry;
+        while (archive_read_next_header(archive, &symlink_entry) == ARCHIVE_OK) {
+            // Process only symlinks this time
+            if (archive_entry_filetype(symlink_entry) != AE_IFLNK) {
+                continue;
+            }
+
+            const char *linkname = archive_entry_pathname(symlink_entry);
+            const char *target = archive_entry_symlink(symlink_entry);
+
+            // Target not found
+            if (!target) {
+                continue;
+            }
+
+            // Find the target file in the already populated files[]
+            size_t target_index = (size_t)-1;
+            for (size_t i = 0; i < files_count; i++) {
+                if (strcmp(files[i].filename, target) == 0) {
+                    target_index = i;
+                    break;
+                }
+            }
+
+            // Target not found in the processed files
+            if (target_index == (size_t)-1 || !files[target_index].data) {
+                continue;
+            }
+
+            // Add the symlink entry
+            if (files_count + 1 > files_struct_length) {
+                files_struct_length *= 2;
+                FileData *oldfiles = files;
+                files = realloc(files, sizeof(FileData) * files_struct_length);
+                if (!files) {
+                    result->fileCount = files_count;
+                    result->files = oldfiles;
+                    error_message = "Memory allocation error for symlink data.";
+                    return error_handler(result, error_message, archive);
+                }
+            }
+
+            files[files_count].filename = strdup(linkname);
+            files[files_count].data_size = files[target_index].data_size;
+            files[files_count].data = malloc(files[target_index].data_size);
+            if (!files[files_count].data) {
+                free(files[files_count].filename);
+                files[files_count].filename = NULL;
+                result->fileCount = files_count;
+                result->files = files;
+                error_message = "Memory allocation error for symlink target data.";
+                return error_handler(result, error_message, archive);
+            }
+            memcpy(files[files_count].data, files[target_index].data, files[target_index].data_size);
+
+            files_count++;
+        }
     }
 
     archive_read_free(archive);
@@ -150,7 +230,7 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
 
     const size_t buffsize = 64 * 1024;
     char buff[buffsize];
-    size_t total_size = 0; 
+    size_t total_size = 0;
     const char *error_message;
 
     FileData* files = malloc(sizeof(FileData) * (files_count + 1));
@@ -159,7 +239,7 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
         printf("Failed to allocate memory for files array\n");
         return NULL;
     }
-    
+
     ExtractedArchive* result = (ExtractedArchive*)malloc(sizeof(ExtractedArchive));
     if (!result) {
         free(files);
