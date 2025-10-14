@@ -213,8 +213,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
                                                                 target, 0);
 
             if (!resolved) {
-                // error_message = "Failed to resolve symlink.";
-                error_message = target;
+                error_message = "Failed to resolve symlink.";
                 return error_handler(result, error_message, archive);
             }
 
