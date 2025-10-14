@@ -47,10 +47,11 @@ static char* join_paths(const char *dir, const char *relative) {
     return buf;
 }
 
-static const FileData *resolve_target_recursive(const FileData *files, size_t file_count,
-                                                const SymlinkInfo *symlinks, size_t symlink_count,
-                                                const char *target, int depth)
-{
+static const FileData *resolve_symlink(
+    const FileData *files, size_t file_count,
+    const SymlinkInfo *symlinks, size_t symlink_count,
+    const char *target, int depth
+) {
     if (!target || depth > 32) // prevent infinite recursion
         return NULL;
 
@@ -67,7 +68,7 @@ static const FileData *resolve_target_recursive(const FileData *files, size_t fi
     for (size_t i = 0; i < symlink_count; i++) {
         if (strcmp(symlinks[i].linkname, target) == 0) {
             // Recurse into that symlink's target
-            return resolve_target_recursive(files, file_count, symlinks, symlink_count,
+            return resolve_symlink(files, file_count, symlinks, symlink_count,
                                             symlinks[i].target, depth + 1);
         }
     }
@@ -207,7 +208,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
             const char *linkname = symlinks[i].linkname;
             const char *target = symlinks[i].target;
 
-            const FileData *resolved = resolve_target_recursive(files, files_count,
+            const FileData *resolved = resolve_symlink(files, files_count,
                                                                 symlinks, symlink_count,
                                                                 target, 0);
 
