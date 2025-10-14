@@ -1,3 +1,4 @@
+#include <libgen.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -19,6 +20,11 @@ typedef struct {
     char error_message[256];
 } ExtractedArchive;
 
+typedef struct {
+    char *linkname;
+    char *target;
+} SymlinkInfo;
+
 ExtractedArchive* error_handler(ExtractedArchive* result, const char *error_message, struct archive* archive) {
 
     if (!result || !archive) {
@@ -33,6 +39,42 @@ ExtractedArchive* error_handler(ExtractedArchive* result, const char *error_mess
     return result;
 }
 
+static char* join_paths(const char *dir, const char *relative) {
+    if (!dir || !*dir) return strdup(relative);
+    size_t len = strlen(dir) + 1 + strlen(relative) + 1;
+    char *buf = malloc(len);
+    snprintf(buf, len, "%s/%s", dir, relative);
+    return buf;
+}
+
+static const FileData *resolve_target_recursive(const FileData *files, size_t file_count,
+                                                const SymlinkInfo *symlinks, size_t symlink_count,
+                                                const char *target, int depth)
+{
+    if (!target || depth > 32) // prevent infinite recursion
+        return NULL;
+
+    // First, check if target is a regular file
+    for (size_t i = 0; i < file_count; i++) {
+        if (strcmp(files[i].filename, target) == 0) {
+            if (files[i].data && files[i].data_size > 0) {
+                return &files[i]; // Found real file
+            }
+        }
+    }
+
+    // If not found among files, maybe it's another symlink
+    for (size_t i = 0; i < symlink_count; i++) {
+        if (strcmp(symlinks[i].linkname, target) == 0) {
+            // Recurse into that symlink's target
+            return resolve_target_recursive(files, file_count, symlinks, symlink_count,
+                                            symlinks[i].target, depth + 1);
+        }
+    }
+
+    return NULL; // Not found
+}
+
 EMSCRIPTEN_KEEPALIVE
 ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
     struct archive* archive;
@@ -40,7 +82,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
     size_t files_struct_length = 100;
     FileData* files = NULL;
     size_t files_count = 0;
-    const char *error_message;
+    const char* error_message;
     bool hasSymLinks = false;
 
     ExtractedArchive* result = (ExtractedArchive*)malloc(sizeof(ExtractedArchive));
@@ -75,7 +117,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
         if (files_count + 1 > files_struct_length) {
             files_struct_length *= 2; // double the length
             FileData* oldfiles = files;
-            files= realloc(files, sizeof(FileData) * files_struct_length);
+            files = realloc(files, sizeof(FileData) * files_struct_length);
             if (!files) {
                 result->fileCount = files_count;
                 result->files = oldfiles; // otherwise memory is lost, alternatively also everything can be freed.
@@ -116,7 +158,7 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
 
     // Resolve symlinks
     if (hasSymLinks) {
-        // Rewind and reopen the archive to iterate over symlinks
+        // Reopen the archive to iterate over symlinks
         archive_read_free(archive);
         archive = archive_read_new();
         archive_read_support_filter_all(archive);
@@ -127,35 +169,54 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
         }
 
         struct archive_entry *symlink_entry;
+
+        size_t symlink_count = 0;
+        size_t symlink_alloc = 16;
+        SymlinkInfo *symlinks = malloc(sizeof(SymlinkInfo) * symlink_alloc);
+
+        // Collect all symlink entries
         while (archive_read_next_header(archive, &symlink_entry) == ARCHIVE_OK) {
-            // Process only symlinks this time
-            if (archive_entry_filetype(symlink_entry) != AE_IFLNK) {
+            if (archive_entry_filetype(symlink_entry) != AE_IFLNK)
+                continue;
+
+            const char *tgt = archive_entry_symlink(symlink_entry);
+
+            if (!tgt) {
                 continue;
             }
 
-            const char *linkname = archive_entry_pathname(symlink_entry);
-            const char *target = archive_entry_symlink(symlink_entry);
-
-            // Target not found
-            if (!target) {
-                continue;
+            if (symlink_count + 1 > symlink_alloc) {
+                symlink_alloc *= 2;
+                symlinks = realloc(symlinks, sizeof(SymlinkInfo) * symlink_alloc);
             }
 
-            // Find the target file in the already populated files[]
-            size_t target_index = (size_t)-1;
-            for (size_t i = 0; i < files_count; i++) {
-                if (strcmp(files[i].filename, target) == 0) {
-                    target_index = i;
-                    break;
-                }
+            // Compute directory of the symlink
+            char *link_dir = strdup(archive_entry_pathname(symlink_entry));
+            char *dir = dirname(link_dir);
+            char *resolved_target_path = join_paths(dir, tgt);
+            free(dir);
+            free(link_dir);
+
+            symlinks[symlink_count].linkname = strdup(archive_entry_pathname(symlink_entry));
+            symlinks[symlink_count].target = strdup(resolved_target_path);
+            symlink_count++;
+        }
+
+        // Resolve and populate symlinks
+        for (size_t i = 0; i < symlink_count; i++) {
+            const char *linkname = symlinks[i].linkname;
+            const char *target = symlinks[i].target;
+
+            const FileData *resolved = resolve_target_recursive(files, files_count,
+                                                                symlinks, symlink_count,
+                                                                target, 0);
+
+            if (!resolved) {
+                // error_message = "Failed to resolve symlink.";
+                error_message = target;
+                return error_handler(result, error_message, archive);
             }
 
-            // Target not found in the processed files
-            if (target_index == (size_t)-1 || !files[target_index].data) {
-                continue;
-            }
-
-            // Add the symlink entry
             if (files_count + 1 > files_struct_length) {
                 files_struct_length *= 2;
                 FileData *oldfiles = files;
@@ -169,20 +230,19 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
             }
 
             files[files_count].filename = strdup(linkname);
-            files[files_count].data_size = files[target_index].data_size;
-            files[files_count].data = malloc(files[target_index].data_size);
-            if (!files[files_count].data) {
-                free(files[files_count].filename);
-                files[files_count].filename = NULL;
-                result->fileCount = files_count;
-                result->files = files;
-                error_message = "Memory allocation error for symlink target data.";
-                return error_handler(result, error_message, archive);
-            }
-            memcpy(files[files_count].data, files[target_index].data, files[target_index].data_size);
+
+            files[files_count].data_size = resolved->data_size;
+            files[files_count].data = malloc(resolved->data_size);
+            memcpy(files[files_count].data, resolved->data, resolved->data_size);
 
             files_count++;
         }
+
+        for (size_t i = 0; i < symlink_count; i++) {
+            free(symlinks[i].linkname);
+            free(symlinks[i].target);
+        }
+        free(symlinks);
     }
 
     archive_read_free(archive);
