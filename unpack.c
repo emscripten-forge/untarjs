@@ -212,9 +212,9 @@ ExtractedArchive* extract_archive(uint8_t* inputData, size_t inputSize ) {
                                                                 symlinks, symlink_count,
                                                                 target, 0);
 
+            // Ignoring unresolved symlinks, there isn't so much we can do here
             if (!resolved) {
-                error_message = "Failed to resolve symlink.";
-                return error_handler(result, error_message, archive);
+                continue;
             }
 
             if (files_count + 1 > files_struct_length) {
