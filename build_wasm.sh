@@ -58,7 +58,7 @@ if true; then
     $MAMBA_EXE create -p $PREFIX_DIR \
             --platform=emscripten-wasm32 \
             -c https://prefix.dev/emscripten-forge-4x \
-            -c https://prefix.dev/conda-forge
+            -c https://prefix.dev/conda-forge \
             --yes \
             zlib bzip2 zstd libiconv libarchive
 fi
