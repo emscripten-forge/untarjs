@@ -43,8 +43,8 @@ if [ ! -d "$EMSDK_DIR" ]; then
     cd $LIBS_FOLDER
     git clone https://github.com/emscripten-core/emsdk.git
     cd $EMSDK_DIR
-    ./emsdk install "3.1.45"
-    ./emsdk activate "3.1.45"
+    ./emsdk install "4.0.9"
+    ./emsdk activate "4.0.9"
     cd ..
 else
     echo "$EMSDK_DIR directory already exists. Skipping clone."
@@ -57,10 +57,10 @@ if true; then
     echo "Creating wasm env at $PREFIX_DIR"
     $MAMBA_EXE create -p $PREFIX_DIR \
             --platform=emscripten-wasm32 \
-            -c https://repo.mamba.pm/emscripten-forge \
-            -c https://repo.mamba.pm/conda-forge \
+            -c https://prefix.dev/emscripten-forge-4x \
+            -c https://prefix.dev/conda-forge
             --yes \
-            zlib bzip2 zstd libiconv libarchive "emscripten-abi=3.1.45"
+            zlib bzip2 zstd libiconv libarchive
 fi
 
 export PREFIX=$PREFIX_DIR
