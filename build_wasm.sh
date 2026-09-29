@@ -86,7 +86,7 @@ emcc unpack.c -o $WASM_LIB/unpack.js \
     ${PREFIX}/lib/libz.a ${PREFIX}/lib/libbz2.a ${PREFIX}/lib/libzstd.a ${PREFIX}/lib/libiconv.a\
     -s MODULARIZE=1 -s WASM=1 -O3 -s ALLOW_MEMORY_GROWTH=1 \
     -s INITIAL_MEMORY=16MB \
-    -s ENVIRONMENT=web \
+    -s ENVIRONMENT=web,node \
     -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "getValue", "UTF8ToString", "wasmMemory"]' \
     -s EXPORTED_FUNCTIONS="['_extract', '_free_extracted_archive', '_malloc', '_free']"
 
