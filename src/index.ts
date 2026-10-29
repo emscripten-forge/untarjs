@@ -1,5 +1,7 @@
 import initializeWasm from './helper';
-import { FilesData, IUnpackJSAPI } from './types';
+import { ExtractedFileChunk, FilesData, IUnpackJSAPI } from './types';
+
+const STREAM_CHUNK_SIZE = 256 * 1024;
 
 export const fetchByteArray = async (url: string): Promise<Uint8Array> => {
   const response = await fetch(url);
@@ -69,6 +71,7 @@ export const initUntarJS = async (locateWasm?: (file: string) => string): Promis
     }
     const filesPtr = wasmModule.getValue(resultPtr, 'i32');
     const fileCount = wasmModule.getValue(resultPtr + 4, 'i32');
+    const wasmHeap = new Uint8Array(wasmModule.wasmMemory.buffer);
 
     /**
      * FilesPtr is a pointer that refers to an instance of the FileData in unpack.c
@@ -94,13 +97,7 @@ export const initUntarJS = async (locateWasm?: (file: string) => string): Promis
       const dataSize = wasmModule.getValue(fileDataPtr + 8, 'i32');
       const dataPtr = wasmModule.getValue(fileDataPtr + 4, 'i32');
       const filename = wasmModule.UTF8ToString(filenamePtr);
-      const fileData = new Uint8Array(
-        wasmModule.wasmMemory.buffer,
-        dataPtr,
-        dataSize
-      );
-      const fileDataCopy = fileData.slice(0);
-      files[filename] = fileDataCopy;
+      files[filename] = wasmHeap.slice(dataPtr, dataPtr + dataSize);
     }
 
     wasmModule._free(inputPtr);
@@ -118,6 +115,118 @@ export const initUntarJS = async (locateWasm?: (file: string) => string): Promis
     return extractData(data, !isArchive);
   };
 
+  const extractDataStream = (
+    data: Uint8Array,
+    decompressionOnly: boolean = false
+  ): AsyncGenerator<ExtractedFileChunk> => {
+    let inputData: Uint8Array | undefined = data;
+
+    return (async function* () {
+      const inputSize = inputData?.length ?? 0;
+      const inputPtr = wasmModule._malloc(inputSize);
+      let streamPtr = 0;
+      let chunkPtr = 0;
+
+      try {
+        if (inputSize > 0 && !inputPtr) {
+          throw new Error('Failed to allocate archive input');
+        }
+        if (!inputData) {
+          throw new Error('Archive data is unavailable');
+        }
+        new Uint8Array(wasmModule.wasmMemory.buffer).set(inputData, inputPtr);
+        inputData = undefined;
+        streamPtr = wasmModule._archive_stream_open(
+          inputPtr,
+          inputSize,
+          decompressionOnly
+        );
+        if (!streamPtr) {
+          throw new Error('Failed to allocate archive stream');
+        }
+        chunkPtr = wasmModule._malloc(STREAM_CHUNK_SIZE);
+        if (!chunkPtr) {
+          throw new Error('Failed to allocate archive stream buffer');
+        }
+
+        const getStreamError = () =>
+          wasmModule.UTF8ToString(wasmModule._archive_stream_error(streamPtr));
+
+        let entryStatus = wasmModule._archive_stream_next_entry(streamPtr);
+        while (entryStatus === 1) {
+          const path = wasmModule.UTF8ToString(
+            wasmModule._archive_stream_entry_path(streamPtr)
+          );
+          const size = wasmModule._archive_stream_entry_size(streamPtr);
+          let offset = 0;
+          let bytesRead = wasmModule._archive_stream_read(
+            streamPtr,
+            chunkPtr,
+            STREAM_CHUNK_SIZE
+          );
+
+          if (bytesRead < 0) {
+            throw new Error(getStreamError());
+          }
+          if (bytesRead === 0) {
+            yield { path, size, offset, data: new Uint8Array(0), final: true };
+          }
+
+          while (bytesRead > 0) {
+            const chunk = new Uint8Array(
+              wasmModule.wasmMemory.buffer,
+              chunkPtr,
+              bytesRead
+            ).slice();
+            const nextBytesRead = wasmModule._archive_stream_read(
+              streamPtr,
+              chunkPtr,
+              STREAM_CHUNK_SIZE
+            );
+
+            if (nextBytesRead < 0) {
+              yield { path, size, offset, data: chunk, final: false };
+              throw new Error(getStreamError());
+            }
+
+            yield {
+              path,
+              size,
+              offset,
+              data: chunk,
+              final: nextBytesRead === 0
+            };
+            offset += bytesRead;
+            bytesRead = nextBytesRead;
+          }
+
+          entryStatus = wasmModule._archive_stream_next_entry(streamPtr);
+        }
+
+        if (entryStatus < 0) {
+          throw new Error(getStreamError());
+        }
+      } finally {
+        if (streamPtr) {
+          wasmModule._archive_stream_close(streamPtr);
+        }
+        if (chunkPtr) {
+          wasmModule._free(chunkPtr);
+        }
+        wasmModule._free(inputPtr);
+      }
+    })();
+  };
+
+  const extractStream = async function* (
+    url: string
+  ): AsyncGenerator<ExtractedFileChunk> {
+    let data: Uint8Array | undefined = await fetchByteArray(url);
+    const stream = extractDataStream(data, !checkIsArchive(url));
+    data = undefined;
+    yield* stream;
+  };
+
   const checkIsArchive = (url: string): boolean => {
     let isArchive: boolean = false;
     let archiveExtArr = ['.conda', 'tar.bz2', 'tar.gz', '.zip'];
@@ -131,7 +240,9 @@ export const initUntarJS = async (locateWasm?: (file: string) => string): Promis
 
   return {
     extract,
-    extractData
+    extractData,
+    extractDataStream,
+    extractStream
   };
 };
 

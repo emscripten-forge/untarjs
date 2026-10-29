@@ -5,6 +5,7 @@ import { expect } from 'earl';
 import unpack from '../lib/unpack.js';
 
 const wasmPath = fileURLToPath(new URL('../lib/unpack.wasm', import.meta.url));
+const streamChunkSize = 256 * 1024;
 const condaPackageUrl =
   'https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2';
 
@@ -73,13 +74,91 @@ const extractFiles = (wasmModule, archive) => {
   }
 };
 
+const streamArchive = async function* (wasmModule, archive) {
+  const inputPointer = wasmModule._malloc(archive.length);
+  let streamPointer = 0;
+  let chunkPointer = 0;
+
+  try {
+    new Uint8Array(wasmModule.wasmMemory.buffer).set(archive, inputPointer);
+    streamPointer = wasmModule._archive_stream_open(
+      inputPointer,
+      archive.length,
+      false
+    );
+    if (!streamPointer) {
+      throw new Error('Failed to allocate archive stream');
+    }
+    chunkPointer = wasmModule._malloc(streamChunkSize);
+
+    const streamError = () =>
+      wasmModule.UTF8ToString(wasmModule._archive_stream_error(streamPointer));
+    let entryStatus = wasmModule._archive_stream_next_entry(streamPointer);
+    while (entryStatus === 1) {
+      const path = wasmModule.UTF8ToString(
+        wasmModule._archive_stream_entry_path(streamPointer)
+      );
+      const size = wasmModule._archive_stream_entry_size(streamPointer);
+      let offset = 0;
+      let bytesRead = wasmModule._archive_stream_read(
+        streamPointer,
+        chunkPointer,
+        streamChunkSize
+      );
+
+      if (bytesRead < 0) {
+        throw new Error(streamError());
+      }
+      if (bytesRead === 0) {
+        yield { path, size, offset, data: new Uint8Array(0), final: true };
+      }
+
+      while (bytesRead > 0) {
+        const data = new Uint8Array(
+          wasmModule.wasmMemory.buffer,
+          chunkPointer,
+          bytesRead
+        ).slice();
+        const nextBytesRead = wasmModule._archive_stream_read(
+          streamPointer,
+          chunkPointer,
+          streamChunkSize
+        );
+
+        if (nextBytesRead < 0) {
+          yield { path, size, offset, data, final: false };
+          throw new Error(streamError());
+        }
+
+        yield { path, size, offset, data, final: nextBytesRead === 0 };
+        offset += bytesRead;
+        bytesRead = nextBytesRead;
+      }
+
+      entryStatus = wasmModule._archive_stream_next_entry(streamPointer);
+    }
+
+    if (entryStatus < 0) {
+      throw new Error(streamError());
+    }
+  } finally {
+    if (streamPointer) {
+      wasmModule._archive_stream_close(streamPointer);
+    }
+    if (chunkPointer) {
+      wasmModule._free(chunkPointer);
+    }
+    wasmModule._free(inputPointer);
+  }
+};
+
 describe('Node WASM support', () => {
   let wasmModule;
+  let wasmBinary;
 
   before(async () => {
-    wasmModule = await unpack({
-      wasmBinary: await readFile(wasmPath)
-    });
+    wasmBinary = await readFile(wasmPath);
+    wasmModule = await unpack({ wasmBinary });
   });
 
   it('loads the WASM file from disk and extracts an archive', () => {
@@ -109,6 +188,62 @@ describe('Node WASM support', () => {
     expect(wasmModule.wasmMemory.buffer.byteLength > 16 * 1024 * 1024).toEqual(
       true
     );
+  });
+
+  it('streams large file contents in bounded chunks', async () => {
+    const fileSize = 3 * streamChunkSize + 37;
+    const content = Buffer.alloc(fileSize, 0x5a);
+    const archive = createTar('streamed.bin', content);
+    const chunks = [];
+
+    for await (const chunk of streamArchive(wasmModule, archive)) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.length).toEqual(4);
+    expect(chunks.map(chunk => chunk.path)).toEqual(
+      Array(4).fill('streamed.bin')
+    );
+    expect(chunks.map(chunk => chunk.offset)).toEqual([
+      0,
+      streamChunkSize,
+      2 * streamChunkSize,
+      3 * streamChunkSize
+    ]);
+    expect(chunks.every(chunk => chunk.data.length <= streamChunkSize)).toEqual(
+      true
+    );
+    expect(chunks.map(chunk => chunk.final)).toEqual([
+      false,
+      false,
+      false,
+      true
+    ]);
+    expect(
+      Buffer.compare(
+        Buffer.concat(chunks.map(chunk => Buffer.from(chunk.data))),
+        content
+      )
+    ).toEqual(0);
+  });
+
+  it('uses less WASM memory when streaming a large file', async () => {
+    const fileSize = 32 * 1024 * 1024;
+    const content = Buffer.alloc(fileSize, 0x3c);
+    const archive = createTar('large-stream.bin', content);
+    const materializedModule = await unpack({ wasmBinary });
+    const streamingModule = await unpack({ wasmBinary });
+
+    extractFiles(materializedModule, archive);
+    const materializedMemory = materializedModule.wasmMemory.buffer.byteLength;
+    let streamedSize = 0;
+    for await (const chunk of streamArchive(streamingModule, archive)) {
+      streamedSize += chunk.data.length;
+    }
+    const streamingMemory = streamingModule.wasmMemory.buffer.byteLength;
+
+    expect(streamedSize).toEqual(fileSize);
+    expect(streamingMemory < materializedMemory).toEqual(true);
   });
 
   it('extracts the conda package from the README example', async () => {

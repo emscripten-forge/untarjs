@@ -6,7 +6,7 @@ Fetching and unpacking archives. This package uses compiled `libarchive` into wa
 
 ## Using
 
-This package has 2 methods:
+This package has 4 methods:
 - extract(url) - downloads an archive through the url and returns extracted data as an object representing the file structure:
 ```
 {
@@ -16,6 +16,18 @@ This package has 2 methods:
 }
 ```
 - exctractData(data) - accepts Uint8Array archive data and returns exracted data in the same format which `extract` method does.
+- extractStream(url) - downloads an archive and returns an async iterable of extracted file chunks.
+- extractDataStream(data) - accepts Uint8Array archive data and returns an async iterable of extracted file chunks.
+
+Each chunk has `path`, `size`, `offset`, `data` (a Uint8Array of at most 256 KiB), and `final` (true for the last chunk of that file). For example:
+
+```js
+for await (const chunk of untarjs.extractStream(condaPackageUrl)) {
+    console.log(chunk.path, chunk.offset, chunk.data.length, chunk.final);
+}
+```
+
+The WASM reader keeps only one output chunk at a time; consumers control how many yielded chunks they retain. `extractStream` currently buffers the downloaded archive before extraction begins.
 
 The example of using:
 ```sh

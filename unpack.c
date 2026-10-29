@@ -25,6 +25,12 @@ typedef struct {
     char *target;
 } SymlinkInfo;
 
+typedef struct {
+    struct archive *archive;
+    struct archive_entry *entry;
+    char error_message[256];
+} ArchiveStream;
+
 ExtractedArchive* error_handler(ExtractedArchive* result, const char *error_message, struct archive* archive) {
 
     if (!result || !archive) {
@@ -377,6 +383,115 @@ ExtractedArchive* decompression(uint8_t* inputData, size_t inputSize) {
     result->fileCount = files_count;
     result->status =  1;
     return result;
+}
+
+EMSCRIPTEN_KEEPALIVE
+ArchiveStream* archive_stream_open(uint8_t* inputData, size_t inputSize, bool raw) {
+    ArchiveStream* stream = calloc(1, sizeof(ArchiveStream));
+    if (!stream) {
+        return NULL;
+    }
+
+    stream->archive = archive_read_new();
+    if (!stream->archive) {
+        free(stream);
+        return NULL;
+    }
+    archive_read_support_filter_all(stream->archive);
+    if (raw) {
+        archive_read_support_format_raw(stream->archive);
+    } else {
+        archive_read_support_format_all(stream->archive);
+    }
+
+    if (archive_read_open_memory(stream->archive, inputData, inputSize) != ARCHIVE_OK) {
+        const char* message = archive_error_string(stream->archive);
+        snprintf(stream->error_message, sizeof(stream->error_message), "%s",
+                 message ? message : "Failed to open archive");
+    }
+    return stream;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int archive_stream_next_entry(ArchiveStream* stream) {
+    if (!stream || !stream->archive) {
+        return -1;
+    }
+    if (stream->error_message[0] != '\0') {
+        return -1;
+    }
+
+    struct archive_entry* entry;
+    int status;
+    while ((status = archive_read_next_header(stream->archive, &entry)) == ARCHIVE_OK) {
+        if (archive_entry_filetype(entry) == AE_IFLNK) {
+            archive_read_data_skip(stream->archive);
+            continue;
+        }
+        stream->entry = entry;
+        return 1;
+    }
+
+    stream->entry = NULL;
+    if (status == ARCHIVE_EOF) {
+        return 0;
+    }
+
+    const char* message = archive_error_string(stream->archive);
+    snprintf(stream->error_message, sizeof(stream->error_message), "%s",
+             message ? message : "Failed to read archive header");
+    return -1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* archive_stream_entry_path(ArchiveStream* stream) {
+    if (!stream || !stream->entry) {
+        return NULL;
+    }
+    const char* path = archive_entry_pathname(stream->entry);
+    return path ? path : "unnamed";
+}
+
+EMSCRIPTEN_KEEPALIVE
+uint32_t archive_stream_entry_size(ArchiveStream* stream) {
+    if (!stream || !stream->entry) {
+        return 0;
+    }
+    la_int64_t size = archive_entry_size(stream->entry);
+    return size > 0 ? (uint32_t)size : 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+ssize_t archive_stream_read(ArchiveStream* stream, uint8_t* output, size_t outputSize) {
+    if (!stream || !stream->archive || !stream->entry) {
+        return -1;
+    }
+    ssize_t bytesRead = archive_read_data(stream->archive, output, outputSize);
+    if (bytesRead < 0) {
+        const char* message = archive_error_string(stream->archive);
+        snprintf(stream->error_message, sizeof(stream->error_message), "%s",
+                 message ? message : "Failed to read archive data");
+    }
+    return bytesRead;
+}
+
+EMSCRIPTEN_KEEPALIVE
+const char* archive_stream_error(ArchiveStream* stream) {
+    if (!stream || stream->error_message[0] == '\0') {
+        return "Archive stream error";
+    }
+    return stream->error_message;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void archive_stream_close(ArchiveStream* stream) {
+    if (!stream) {
+        return;
+    }
+    if (stream->archive) {
+        archive_read_free(stream->archive);
+    }
+    free(stream);
 }
 
 EMSCRIPTEN_KEEPALIVE
