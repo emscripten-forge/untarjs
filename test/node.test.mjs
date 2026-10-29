@@ -40,7 +40,7 @@ const extractFiles = (wasmModule, archive) => {
   let resultPointer = 0;
 
   try {
-    wasmModule.HEAPU8.set(archive, inputPointer);
+    new Uint8Array(wasmModule.wasmMemory.buffer).set(archive, inputPointer);
     resultPointer = wasmModule._extract(inputPointer, archive.length, false);
 
     const status = wasmModule.getValue(resultPointer + 8, 'i32');
@@ -58,7 +58,7 @@ const extractFiles = (wasmModule, archive) => {
       const dataPointer = wasmModule.getValue(filePointer + 4, 'i32');
       const dataSize = wasmModule.getValue(filePointer + 8, 'i32');
       const filename = wasmModule.UTF8ToString(filenamePointer);
-      files[filename] = wasmModule.HEAPU8.slice(
+      files[filename] = new Uint8Array(wasmModule.wasmMemory.buffer).slice(
         dataPointer,
         dataPointer + dataSize
       );

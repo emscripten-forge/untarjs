@@ -1,8 +1,7 @@
 export interface IWasmModule {
-  wasmMemory: any;
+  wasmMemory: WebAssembly.Memory;
   _free_extracted_archive(resultPtr: number): void;
   UTF8ToString(filenamePtr: number): string;
-  HEAPU8: Uint8Array;
   _malloc(size: number): number;
   _free(ptr: number): void;
   _extract(

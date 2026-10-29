@@ -22,7 +22,7 @@ export const initUntarJS = async (locateWasm?: (file: string) => string): Promis
       so we have to allocate memory for file data
     **/
     let inputPtr: number | null = wasmModule._malloc(data.length);
-    wasmModule.HEAPU8.set(data, inputPtr);
+    new Uint8Array(wasmModule.wasmMemory.buffer).set(data, inputPtr);
 
 
     let resultPtr: number | null = wasmModule._extract(
@@ -95,7 +95,7 @@ export const initUntarJS = async (locateWasm?: (file: string) => string): Promis
       const dataPtr = wasmModule.getValue(fileDataPtr + 4, 'i32');
       const filename = wasmModule.UTF8ToString(filenamePtr);
       const fileData = new Uint8Array(
-        wasmModule.HEAPU8.buffer,
+        wasmModule.wasmMemory.buffer,
         dataPtr,
         dataSize
       );
