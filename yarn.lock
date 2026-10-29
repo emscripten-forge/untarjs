@@ -16,6 +16,7 @@ __metadata:
     "@typescript-eslint/parser": "npm:~6.13.2"
     assert: "npm:^2.1.0"
     copyfiles: "npm:^2.4.1"
+    earl: "npm:^2.0.0"
     eslint: "npm:~8.55.0"
     eslint-config-prettier: "npm:~9.1.0"
     eslint-plugin-prettier: "npm:~5.0.1"
@@ -872,10 +873,28 @@ __metadata:
   languageName: node
   linkType: hard
 
+"earl@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "earl@npm:2.0.0"
+  dependencies:
+    error-stack-parser: "npm:^2.1.4"
+  checksum: 10c0/0870c44149109a3b89f58e961620870475f8fe0b6aef88879568f77294625791b493702ef698d2e43ca45c157c150655b613dc90db329a4f29502edce81ce2ee
+  languageName: node
+  linkType: hard
+
 "emoji-regex@npm:^8.0.0":
   version: 8.0.0
   resolution: "emoji-regex@npm:8.0.0"
   checksum: 10c0/b6053ad39951c4cf338f9092d7bfba448cdfd46fe6a2a034700b149ac9ffbc137e361cbd3c442297f86bed2e5f7576c1b54cc0a6bf8ef5106cc62f496af35010
+  languageName: node
+  linkType: hard
+
+"error-stack-parser@npm:^2.1.4":
+  version: 2.1.4
+  resolution: "error-stack-parser@npm:2.1.4"
+  dependencies:
+    stackframe: "npm:^1.3.4"
+  checksum: 10c0/7679b780043c98b01fc546725484e0cfd3071bf5c906bbe358722972f04abf4fc3f0a77988017665bab367f6ef3fc2d0185f7528f45966b83e7c99c02d5509b9
   languageName: node
   linkType: hard
 
@@ -2725,6 +2744,13 @@ __metadata:
   version: 3.0.0
   resolution: "slash@npm:3.0.0"
   checksum: 10c0/e18488c6a42bdfd4ac5be85b2ced3ccd0224773baae6ad42cfbb9ec74fc07f9fa8396bd35ee638084ead7a2a0818eb5e7151111544d4731ce843019dab4be47b
+  languageName: node
+  linkType: hard
+
+"stackframe@npm:^1.3.4":
+  version: 1.3.4
+  resolution: "stackframe@npm:1.3.4"
+  checksum: 10c0/18410f7a1e0c5d211a4effa83bdbf24adbe8faa8c34db52e1cd3e89837518c592be60b60d8b7270ac53eeeb8b807cd11b399a41667f6c9abb41059c3ccc8a989
   languageName: node
   linkType: hard
 

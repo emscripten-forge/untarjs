@@ -7,6 +7,7 @@
   "scripts": {
     "build": "yarn run clean && tsc && yarn run build:wasm && copyfiles -u 1 \"src/**/*.d.ts\" lib",
     "build:wasm": "node build_wasm.js",
+    "test": "node --test test/*.test.mjs",
     "clean": "rimraf lib && rimraf tsconfig.tsbuildinfo",
     "prettier": "prettier --list-different --write \"src/**/*.ts\"",
     "prettier:check": "prettier --check \"src/**/*.ts\"",
@@ -48,6 +49,7 @@
     "@typescript-eslint/eslint-plugin": "~6.13.2",
     "@typescript-eslint/parser": "~6.13.2",
     "copyfiles": "^2.4.1",
+    "earl": "^2.0.0",
     "eslint": "~8.55.0",
     "eslint-config-prettier": "~9.1.0",
     "eslint-plugin-prettier": "~5.0.1",
