@@ -9,7 +9,7 @@ const condaPackageUrl =
   'https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2';
 
 const createTar = (name, contents) => {
-  const content = Buffer.from(contents);
+  const content = Buffer.isBuffer(contents) ? contents : Buffer.from(contents);
   const header = Buffer.alloc(512);
   header.write(name, 0, 100, 'utf8');
   header.write('0000644\0', 100, 8, 'ascii');
@@ -89,6 +89,25 @@ describe('Node WASM support', () => {
     expect(Object.keys(files)).toEqual(['hello.txt']);
     expect(Buffer.from(files['hello.txt']).toString()).toEqual(
       'Hello from Node'
+    );
+  });
+
+  it('extracts a large file and grows WASM memory', () => {
+    const fileSize = 24 * 1024 * 1024;
+    const content = Buffer.alloc(fileSize, 0xa5);
+    const archive = createTar('large.bin', content);
+    const files = extractFiles(wasmModule, archive);
+    const extracted = files['large.bin'];
+    const extractedBuffer = Buffer.from(
+      extracted.buffer,
+      extracted.byteOffset,
+      extracted.byteLength
+    );
+
+    expect(extracted.length).toEqual(fileSize);
+    expect(Buffer.compare(extractedBuffer, content)).toEqual(0);
+    expect(wasmModule.wasmMemory.buffer.byteLength > 16 * 1024 * 1024).toEqual(
+      true
     );
   });
 
